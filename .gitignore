@@ -1,0 +1,37 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# MicroPython compiled files
+*.mpy
+
+# Local scratch / temp directories
+scratch/
+
+# Virtual environments
+venv/
+.env/
+.env.*
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.Python
+
+# Logs
+*.log
+
+# Microdot compiled templates / cache
+utemplate/__pycache__/
+
+# Generated web assets
+tools/__pycache__/
+app/__pycache__/
