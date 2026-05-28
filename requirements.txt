@@ -1,3 +1,2 @@
 microdot
-utemplate
 umqtt.simple

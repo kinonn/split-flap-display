@@ -3,9 +3,7 @@ try:
 except ImportError:
     import json
 
-from utemplate import compiled
 from microdot import Microdot, Response, abort
-from microdot.utemplate import Template
 
 from settings import ValidationError
 import timekeeper
@@ -13,6 +11,8 @@ import wifi_manager
 
 
 STATIC_TYPES = {
+    "index.html": "text/html",
+    "settings.html": "text/html",
     "index.css": "text/css",
     "index.js": "application/javascript",
     "timezones.json": "application/json",
@@ -21,19 +21,17 @@ STATIC_TYPES = {
 
 def create_app(settings, controller, mqtt):
     app = Microdot()
-    Template.initialize(template_dir="templates", loader_class=compiled.Loader)
+
+    @app.before_request
+    def collect_garbage(request):
+        import gc
+        gc.collect()
 
     @app.get("/")
     async def root(request):
         return Response.redirect("/index.html")
 
-    @app.get("/index.html")
-    async def index(request):
-        return await _html("index.tpl", settings)
 
-    @app.get("/settings.html")
-    async def settings_page(request):
-        return await _html("settings.tpl", settings)
 
     @app.get("/settings")
     async def get_settings(request):
@@ -154,10 +152,7 @@ def create_app(settings, controller, mqtt):
     return app
 
 
-async def _html(template_name, settings):
-    title = settings.get_string("name") or "Split Flap"
-    body = await Template(template_name).render_async(title=title)
-    return Response(body, headers={"Content-Type": "text/html; charset=utf-8"})
+
 
 
 def _json(data, status=200):
