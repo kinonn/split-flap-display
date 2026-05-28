@@ -13,7 +13,6 @@ from web_app import create_app
 import wifi_manager
 
 
-
 def test_display():
     settings = Settings()
     display = SplitFlapDisplay(settings)
@@ -59,9 +58,8 @@ async def main():
     await controller.run()
 
 
-test_display()
+# test_display()
 
-'''
 try:
     asyncio.run(main())
 finally:
@@ -69,4 +67,3 @@ finally:
         asyncio.new_event_loop()
     except AttributeError:
         pass
-'''

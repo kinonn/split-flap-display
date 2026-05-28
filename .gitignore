@@ -35,3 +35,5 @@ utemplate/__pycache__/
 # Generated web assets
 tools/__pycache__/
 app/__pycache__/
+app/templates/index_tpl.py
+app/templates/settings_tpl.py

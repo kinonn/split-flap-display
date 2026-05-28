@@ -34,6 +34,7 @@ class SplitFlapMqtt:
 
         server = self.settings.get_string("mqtt_server")
         if not server:
+            print("MQTT disabled: no server configured")
             self.enabled = False
             return
 

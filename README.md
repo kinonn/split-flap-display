@@ -31,6 +31,20 @@ node micropython/tools/stage_web_assets.mjs
 
 The existing `npm run assets:micropython` script runs those steps together.
 
+## Precompiling Templates
+
+To precompile utemplate templates from the `app/templates` folder:
+
+```sh
+python tools/precompile_templates.py
+```
+
+Optional flags:
+- `--force`: Force recompilation of all templates by removing existing compiled modules first
+- `--recursive`: Recursively compile `.tpl` files in subdirectories
+
+The script scans for `.tpl` files, compiles them to Python modules, and writes the output as `*_tpl.py` files in the same directory.
+
 ## Notes
 
 The Arduino OTA flow does not have a direct standard MicroPython equivalent, so the `otaPass` setting is preserved for API compatibility but is not used by this port.
