@@ -31,8 +31,6 @@ def create_app(settings, controller, mqtt):
     async def root(request):
         return Response.redirect("/index.html")
 
-
-
     @app.get("/settings")
     async def get_settings(request):
         return _json(settings.to_dict())
@@ -150,9 +148,6 @@ def create_app(settings, controller, mqtt):
         return "Not found", 404
 
     return app
-
-
-
 
 
 def _json(data, status=200):

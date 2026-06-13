@@ -1,4 +1,4 @@
-# Bytecode
+# Python bytecode
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,8 +6,11 @@ __pycache__/
 # MicroPython compiled files
 *.mpy
 
+# Generated build output
+/build/
+
 # Local scratch / temp directories
-scratch/
+/app/scratch/
 
 # Virtual environments
 venv/
@@ -21,7 +24,6 @@ venv/
 Thumbs.db
 
 # Python packaging
-build/
 dist/
 *.egg-info/
 .Python
@@ -29,11 +31,6 @@ dist/
 # Logs
 *.log
 
-# Microdot compiled templates / cache
-utemplate/__pycache__/
-
 # Generated web assets
 tools/__pycache__/
 app/__pycache__/
-app/templates/index_tpl.py
-app/templates/settings_tpl.py

@@ -3,13 +3,15 @@ from micropython import const
 
 # Pre-calculate constant step states for fast lookup
 _STEP_STATES = (
-    const(0b1111111111100111), # Step 0
-    const(0b1111111111110011), # Step 1
-    const(0b1111111111111001), # Step 2
-    const(0b1111111111101101)  # Step 3
+    const(0b1111111111100111),       # Step 0
+    const(0b1111111111110011),       # Step 1
+    const(0b1111111111111001),       # Step 2
+    const(0b1111111111101101)        # Step 3
 )
 
+# _INIT_STATE: idle/stop bit pattern for module outputs
 _INIT_STATE = const(0b1111111111100001)
+HALL_MASK = const(1 << 15)
 
 class SplitFlapModule:
     STANDARD_CHARS = (' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
@@ -21,11 +23,10 @@ class SplitFlapModule:
         self.position = 0
         self.step_number = 0
         self.steps_per_rot = steps_per_rot
-        self.charset_size = charset_size
         self.has_errored = False
-        
+
         self.magnet_position = magnet_pos + step_offset
-        
+
         self.num_chars = 0
         if charset_size == 48:
             self.chars = self.EXTENDED_CHARS
@@ -34,23 +35,19 @@ class SplitFlapModule:
             self.chars = self.STANDARD_CHARS
             self.num_chars = 37
 
-        # self.char_positions = [0] * self.num_chars
-        # step_size = self.steps_per_rot / self.num_chars
-        # current_position = 0.0
-        # for i in range(self.num_chars):
-        #     self.char_positions[i] = int(current_position)
-        #     current_position += step_size
-
         self.char_positions = [
             round((i * self.steps_per_rot + self.num_chars / 2) / self.num_chars) for i in range(self.num_chars)
         ]
-        
-        
+
+        # Build O(1) lookup from character -> step position
+        self._char_to_pos = {c: p for c, p in zip(self.chars, self.char_positions)}
+
         # Pre-allocate buffer for I2C writes to avoid GC allocation during stepping
         self._buf = bytearray(2)
 
     @micropython.native
     def write_io(self, data: int):
+        """Write step state to the module via I2C."""
         # Cache locals
         buf = self._buf
         buf[0] = data & 0xFF
@@ -63,70 +60,65 @@ class SplitFlapModule:
                 print("Error writing data to module", self.address, "error code:", e)
 
     def init(self):
+        """Initialize module: set idle, then pulse steps for homing."""
         self.write_io(_INIT_STATE)
-        
+
         self.stop()
-        
+
         init_delay_ms = 100
         utime.sleep_ms(init_delay_ms)
-        self.step()
-        utime.sleep_ms(init_delay_ms)
-        self.step()
-        utime.sleep_ms(init_delay_ms)
-        self.step()
-        utime.sleep_ms(init_delay_ms)
-        self.step()
-        utime.sleep_ms(init_delay_ms)
-        
+        for _ in range(4):
+            self.step()
+            utime.sleep_ms(init_delay_ms)
+
         self.stop()
 
     def get_char_position(self, input_char):
-        input_char = input_char.upper()
-        try:
-            index = self.chars.index(input_char)
-            return self.char_positions[index]
-        except ValueError:
-            return 0 # Character not found, return blank
+        """Return step index for a character, or 0 if not found."""
+        if not isinstance(input_char, str):
+            return 0
+        return self._char_to_pos.get(input_char.upper(), 0)
 
     @micropython.native
     def stop(self):
+        """Stop the motor by sending the idle state."""
         self.write_io(_INIT_STATE)
 
     @micropython.native
     def start(self):
+        """Advance step phase and begin rotation (no position update)."""
         self.step_number = (self.step_number + 3) % 4
         self.step(update_position=False)
 
     @micropython.native
     def step(self, update_position: bool = True):
+        """Execute one step using precomputed step states."""
         # Look up state directly from pre-calculated tuple using step_number
         self.write_io(_STEP_STATES[self.step_number])
-        
+
         if update_position:
-            # self.position = (self.position + 1) % self.steps_per_rot
-            position = self.position + 1
-            if position >= self.steps_per_rot:
-                position = 0
-            self.position = position
-            
+            self.position = (self.position + 1) % self.steps_per_rot
+
         # Bitwise AND 3 is equivalent to modulo 4 but faster
         self.step_number = (self.step_number + 1) & 3
 
     @micropython.native
     def read_hall_effect_sensor(self) -> bool:
+        """Read Hall-effect sensor. Returns False on I2C/read error."""
         if self.has_errored:
             return False
-            
+
         try:
             data = self.i2c.readfrom(self.address, 2)
             if len(data) == 2:
                 input_state = data[0] | (data[1] << 8)
-                return (input_state & (1 << 15)) != 0
+                return (input_state & HALL_MASK) != 0
         except OSError:
             pass
         return False
 
     @micropython.native
     def magnet_detected(self):
+        """Reset position to magnet reference and clear error state."""
         self.position = self.magnet_position
-        
+        self.has_errored = False
