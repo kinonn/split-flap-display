@@ -15,15 +15,16 @@ import wifi_manager
 
 def test_display():
     settings = Settings()
+    print("Testing display with settings:", settings.__dict__)
     display = SplitFlapDisplay(settings)
     display.init()
     
-    # display.home()
-    # display.test_all()
+    display.home()
+    display.test_all()
     # print("test")
-    display.home_to_string("123456")
+    # display.home_to_string("123456")
     time.sleep_ms(250)
-    display.write_string("hhhhhh")
+    display.write_string("#japan!")
 
 
 async def main():
@@ -58,12 +59,12 @@ async def main():
     await controller.run()
 
 
-# test_display()
+test_display()
 
-try:
-    asyncio.run(main())
-finally:
-    try:
-        asyncio.new_event_loop()
-    except AttributeError:
-        pass
+# try:
+#     asyncio.run(main())
+# finally:
+#     try:
+#         asyncio.new_event_loop()
+#     except AttributeError:
+#         pass
