@@ -29,6 +29,9 @@ class SplitFlapMqtt:
     def set_display(self, display):
         self.display = display
 
+    def set_controller(self, controller):
+        self.controller = controller
+
     def setup(self):
         self.disconnect()
 
@@ -150,11 +153,17 @@ class SplitFlapMqtt:
     def _on_message(self, topic, payload):
         try:
             message = payload.decode()
-        except AttributeError:
+        except (AttributeError, Exception):
             message = str(payload)
 
         print("[MQTT] Message received:", message)
-        if self.display is not None:
+        if hasattr(self, "controller") and self.controller is not None:
+            self.controller.set_mqtt_text(
+                message,
+                speed=self.settings.get_float("maxVel"),
+                centering=False,
+            )
+        elif getattr(self, "display", None) is not None:
             self.display.write_string(
                 message,
                 self.settings.get_float("maxVel"),

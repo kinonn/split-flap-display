@@ -48,6 +48,7 @@ async def main():
             display.write_char("X")
 
     controller = DisplayController(settings, display, mqtt)
+    mqtt.set_controller(controller)
     app = create_app(settings, controller, mqtt)
 
     asyncio.create_task(app.start_server(host="0.0.0.0", port=80, debug=False))

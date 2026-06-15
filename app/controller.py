@@ -43,6 +43,19 @@ class DisplayController:
         self.wifi_check_interval_ms = 1000
         self.reboot_required = False
 
+    def set_mqtt_text(self, message, speed=20, centering=False):
+        import gc
+        max_len = self.display.num_modules
+        self.input_string = message[:max_len] if message else ''
+        if self.input_string != self.written_string:
+            self.display.write_string(
+                self.input_string,
+                speed if speed else MAX_RPM,
+                centering=centering,
+            )
+            self.written_string = self.input_string
+            gc.collect()
+
     def set_single_text(self, word, delay_ms=1000, centering=True):
         self.input_string = word
         self.multi_word_delay_ms = delay_ms
