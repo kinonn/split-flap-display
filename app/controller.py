@@ -149,16 +149,25 @@ class DisplayController:
         self.last_check_wifi = now
 
     def _reconnect_if_needed(self):
+        """Kept for backward compatibility — spawns async task."""
         if not wifi_manager.consume_reconnect_request():
             return
+        asyncio.create_task(self._async_reconnect())
 
+    async def _async_reconnect(self):
+        """Non-blocking WiFi reconnect. Yields between display updates
+        so HTTP/MQTT keep running during the connection attempt."""
+        await _sleep_ms(100)  # Yield immediately
         self.display.write_string("")
-        connected = wifi_manager.configure(self.settings)
+        await _sleep_ms(50)
+
+        connected = await wifi_manager.async_configure(self.settings)
+        await _sleep_ms(50)
 
         if connected:
             self.display.write_string("OK")
             self.written_string = "OK"
-            time.sleep_ms(500)
+            await _sleep_ms(500)  # Was time.sleep_ms(500) — blocked loop
             self.display.write_string("")
             self.written_string = ""
         else:
@@ -169,6 +178,7 @@ class DisplayController:
                 self.display.write_char("X")
                 self.written_string = "X"
 
+        await _sleep_ms(50)
         self.mqtt.setup()
 
     async def _reboot_if_needed(self):

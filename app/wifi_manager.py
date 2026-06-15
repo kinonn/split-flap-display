@@ -149,3 +149,58 @@ def _sync_clock():
         print("NTP time synchronized")
     except Exception as exc:
         print("NTP sync failed:", exc)
+
+async def _connect_station_async(ssid, password, hostname):
+    """Async version that yields between poll cycles."""
+    try:
+        import uasyncio as aios
+    except ImportError:
+        import asyncio as aios
+
+    station = network.WLAN(network.STA_IF)
+    access_point = network.WLAN(network.AP_IF)
+
+    access_point.active(False)
+    station.active(True)
+    _set_hostname(station, hostname)
+
+    if not station.isconnected():
+        print("Connecting to Wi-Fi:", ssid)
+        station.connect(ssid, password)
+
+    start = time.ticks_ms()
+    while not station.isconnected():
+        if time.ticks_diff(time.ticks_ms(), start) >= CONNECT_TIMEOUT_MS:
+            print("Wi-Fi connection failed")
+            return False
+        await aios.sleep_ms(250)  # Yield instead of blocking
+
+    state["ip"] = station.ifconfig()[0]
+    print("Connected to Wi-Fi: http://%s" % state["ip"])
+    return True
+
+
+async def async_configure(settings):
+    """Async version of configure() for use from the event loop."""
+    timekeeper.configure(settings)
+
+    if network is None:
+        state["configured"] = True
+        state["connection_mode"] = 0
+        return False
+
+    ssid = settings.get_string("ssid")
+    password = settings.get_string("password")
+    hostname = settings.get_string("mdns") or "splitflap"
+
+    if ssid and password:
+        connected = await _connect_station_async(ssid, password, hostname)
+        if connected:
+            state["configured"] = True
+            state["connection_mode"] = 1
+            _sync_clock()
+            return True
+
+    start_access_point()
+    state["configured"] = True
+    return False
