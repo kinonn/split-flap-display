@@ -23,7 +23,12 @@ class SplitFlapModule:
         self.position = 0
         self.step_number = 0
         self.steps_per_rot = steps_per_rot
-        self.has_errored = False
+        self._err_count = 0
+        self._err_reset_ticks_ms = 0
+        I2C_ERR_MAX_COUNT = const(3)
+        self._err_max_count = I2C_ERR_MAX_COUNT
+        I2C_ERR_TIMEOUT_MS = const(10000)
+        self._err_timeout_ms = I2C_ERR_TIMEOUT_MS
 
         self.magnet_position = magnet_pos + step_offset
 
@@ -105,11 +110,16 @@ class SplitFlapModule:
     @micropython.native
     def read_hall_effect_sensor(self) -> bool:
         """Read Hall-effect sensor. Returns False on I2C/read error."""
-        if self.has_errored:
-            return False
+        # Check if we are blocked by I2C errors, with timeout-based recovery
+        if self._err_count >= self._err_max_count:
+            elapsed = utime.ticks_diff(utime.ticks_ms(), self._err_reset_ticks_ms)
+            if 0 < elapsed < self._err_timeout_ms:
+                return False
 
         try:
             data = self.i2c.readfrom(self.address, 2)
+            if self._err_count > 0 and len(data) == 2:
+                self._err_count = 0
             if len(data) == 2:
                 input_state = data[0] | (data[1] << 8)
                 return (input_state & HALL_MASK) != 0
@@ -121,4 +131,9 @@ class SplitFlapModule:
     def magnet_detected(self):
         """Reset position to magnet reference and clear error state."""
         self.position = self.magnet_position
-        self.has_errored = False
+        self._err_count = 0
+        self._err_reset_ticks_ms = 0
+        I2C_ERR_MAX_COUNT = const(3)
+        self._err_max_count = I2C_ERR_MAX_COUNT
+        I2C_ERR_TIMEOUT_MS = const(10000)
+        self._err_timeout_ms = I2C_ERR_TIMEOUT_MS
