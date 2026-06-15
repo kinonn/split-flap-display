@@ -1,6 +1,7 @@
 import utime
 import urandom
 from machine import I2C, Pin
+import micropython
 from micropython import const
 
 from  splitflap_module import SplitFlapModule
