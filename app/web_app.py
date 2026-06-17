@@ -1,146 +1,213 @@
-"""Split-flap display web API built on microdot framework."""
+try:
+    import ujson as json
+except ImportError:
+    import json
+
+from microdot import Microdot, Response, abort
+
+from settings import ValidationError
+import timekeeper
+import wifi_manager
+
+
+STATIC_TYPES = {
+    "index.html": "text/html",
+    "settings.html": "text/html",
+    "index.css": "text/css",
+    "index.js": "application/javascript",
+    "timezones.json": "application/json",
+}
 
 
 def create_app(settings, controller, mqtt):
-    from microdot import Microdot
     app = Microdot()
 
     @app.before_request
-    def collect_gc(request):
+    def collect_garbage(request):
         import gc
         gc.collect()
 
     @app.get("/")
     async def root(request):
-        return Microdot.redirect("/static/index.html")
-
-    @app.post("/api/display")
-    async def api_display(request):
-        try:
-            payload = request.json or {}
-            text = str(payload.get("text", ""))
-            mode = str(payload.get("mode", "single"))
-            if text == "" or mode == "clear":
-                controller.display.write_string("")
-                settings.set("text", "")
-                return Microdot(text='{"ok":true,"type":"cleared"}')
-            if mode == "multi_group":
-                mg = getattr(controller, "mg_ctrl", None)
-                if mg is not None:
-                    ack_ids = mg.broadcast_text(text)
-                    settings.set("text", text[:48])
-                    return Microdot(
-                        text='{"ok":true,"type":"multi_group","acks":["'
-                        + ','.join(str(a) for a in ack_ids) + '"]}'
-                    )
-            controller.set_single_text(text)
-            settings.set("text", text)
-            return Microdot(text='{"ok":true,"type":"single"}')
-        except Exception as exc:
-            print("[WebAPI] Display error:", str(exc))
-            return Microdot(
-                text='{"error":"' + str(exc).replace('"', "'") + '"}',
-            )
-
-    @app.post("/api/slaves")
-    async def api_add_slave(request):
-        try:
-            payload = request.json or {}
-            mac = str(payload.get("mac", ""))
-            modules = int(str(payload.get("modules", 1)))
-            if not mac or len(mac) != 17:
-                return Microdot(text='{"error":"bad_mac"}')
-            slaves_list = settings.get_list("slaves", default=[])
-            entry = {"mac": mac, "modules": modules}
-            slaves_list.append(entry)
-            settings.set("slaves", slaves_list)
-            print("[WebAPI] Added slave:", mac)
-            return Microdot(
-                text='{"ok":true,"count":' + str(len(slaves_list)) + '}'
-            )
-        except Exception as exc:
-            return Microdot(text='{"error":"' + str(exc).replace('"', "'") + '"}')
-
-    @app.delete("/api/slaves")
-    async def api_remove_slave(request):
-        try:
-            payload = request.json or {}
-            idx = int(str(payload.get("index", -1)))
-            slaves_list = settings.get_list("slaves", default=[])
-            if 0 <= idx < len(slaves_list):
-                del slaves_list[idx]
-            else:
-                slaves_list.clear()
-            settings.set("slaves", slaves_list)
-            print("[WebAPI] Cleared slaves:", str(len(slaves_list)))
-            return Microdot(
-                text='{"ok":true,"count":' + str(len(slaves_list)) + '}'
-            )
-        except Exception as exc:
-            return Microdot(text='{"error":"' + str(exc).replace('"', "'") + '"}')
-
-    @app.get("/api/slaves")
-    async def api_get_slaves(request):
-        slaves_list = settings.get_list("slaves", default=[])
-        jstr = '{"ok":true,"slaves":[' + ",".join(
-            '{"mac":"' + s["mac"] + '","modules":' + str(s["modules"]) + "}"
-            for s in slaves_list
-        ) + ']}'
-        return Microdot(text=jstr)
-
-    @app.post("/api/commands")
-    async def api_commands(request):
-        try:
-            payload = request.json or {}
-            action = str(payload.get("cmd", ""))
-            if action == "home":
-                controller.display.home()
-                return Microdot(text='{"ok":true}')
-            elif action == "clear":
-                controller.display.write_string("")
-                return Microdot(text='{"ok":true}')
-            else:
-                return Microdot(text='{"error":"unknown_cmd"}')
-        except Exception as exc:
-            print("[WebAPI] Cmd error:", str(exc))
-            return Microdot(text='{"error":"' + str(exc) + '"}')
-
-    @app.patch("/settings")
-    async def patch_settings(request):
-        try:
-            payload = request.json or {}
-            if not isinstance(payload, dict):
-                return Microdot(text='{"error":"not_json"}')
-            for key, value in payload.items():
-                settings.set(key, value)
-            print("[WebAPI] Settings patched:", str(len(payload)))
-            return Microdot(text='{"ok":true}')
-        except Exception as exc:
-            print("[WebAPI] Patch error:", str(exc))
-            return Microdot(text='{"error":"' + str(exc).replace('"', "'") + '"}')
-
-    @app.get("/static/<file_path:path>")
-    def serve_static(request, file_path):
-        try:
-            import microdot
-            return microdot.send_from_directory(
-                "static/", str(file_path)
-            )
-        except Exception as exc:
-            print("[Static] Error:", str(exc))
-            try:
-                from microdot import send_from_directory
-                return send_from_directory("static/", str(file_path))
-            except Exception:
-                return Microdot(text=str(exc), status_code=404)
+        return Response.redirect("/index.html")
 
     @app.get("/settings")
-    async def settings_page(request):
+    async def get_settings(request):
+        return _json(settings.to_dict())
+
+    @app.post("/settings/reset")
+    async def reset_settings(request):
+        settings.reset()
+        controller.request_reconnect()
+        return _json(
+            {
+                "message": "Settings reset successfully! Reconnect to the %s network"
+                % wifi_manager.AP_SSID,
+                "type": "success",
+                "persistent": True,
+            }
+        )
+
+    @app.post("/settings")
+    async def post_settings(request):
+        payload = request.json
+        if not isinstance(payload, dict):
+            return _json({"message": "Expected a JSON object", "type": "error"}, 400)
+
+        before = settings.to_dict()
+        response = {"message": "Settings saved successfully!"}
+        reconnect = False
+        reboot = False
+
+        if _changed(before, payload, "ssid") or _changed(before, payload, "password"):
+            reconnect = True
+            response["message"] = (
+                "Settings updated successfully, Network settings have changed, "
+                "reconnect to the %s network" % payload.get("ssid", settings.get_string("ssid"))
+            )
+
+        if _changed(before, payload, "otaPass"):
+            reboot = True
+            response["message"] = (
+                "Settings updated successfully, OTA password has changed. Rebooting..."
+            )
+
+        if _changed(before, payload, "mdns"):
+            reconnect = True
+            mdns = str(payload.get("mdns") or "splitflap")
+            response["message"] = (
+                "Settings updated successfully, mDNS name has changed, "
+                "automatically redirecting to http://%s.local..." % mdns
+            )
+            response["redirect"] = "http://%s.local/settings.html" % mdns
+
+        mqtt_keys = ("mqtt_server", "mqtt_port", "mqtt_user", "mqtt_pass")
+        if any(_changed(before, payload, key) for key in mqtt_keys):
+            reconnect = True
+            response["message"] = "MQTT settings have changed, reconnecting..."
+
         try:
-            from microdot import send_from_directory
-            return send_from_directory("static/", "settings.html")
-        except Exception as exc:
-            print("[Static] Settings error:", str(exc))
-            return Microdot(text=str(exc), status_code=404)
+            changed = settings.update(payload)
+        except ValidationError as exc:
+            return _json(
+                {
+                    "message": "Failed to save settings",
+                    "type": "error",
+                    "errors": {"key": exc.key, "message": exc.message},
+                },
+                400,
+            )
+
+        if "timezone" in changed:
+            timekeeper.configure(settings)
+
+        if reconnect:
+            controller.request_reconnect()
+        if reboot:
+            controller.request_reboot()
+
+        response["type"] = "success"
+        response["persistent"] = reconnect or reboot
+        return _json(response)
+
+    @app.post("/text")
+    async def post_text(request):
+        payload = request.json
+        if not isinstance(payload, dict):
+            return _json({"message": "Expected a JSON object", "type": "error"}, 400)
+
+        error = _validate_text_payload(payload)
+        if error:
+            return _json({"message": error, "type": "error"}, 400)
+
+        delay_ms = int(float(payload["delay"]) * 1000)
+        centering = bool(payload["center"])
+        mode = payload["mode"]
+        words = [_percent_decode(str(word)) for word in payload["words"]]
+
+        if mode == "single":
+            controller.set_single_text(words[0], delay_ms, centering)
+        elif mode == "multiple":
+            controller.set_multi_text(words, delay_ms, centering)
+
+        return _json({"message": "Text updated successfully!", "type": "success"})
+
+    @app.get("/<path:filename>")
+    async def static_file(request, filename):
+        if filename not in STATIC_TYPES:
+            abort(404)
+
+        return Response.send_file(
+            "static/" + filename,
+            content_type=STATIC_TYPES[filename],
+            max_age=600,
+        )
+
+    @app.errorhandler(404)
+    async def not_found(request):
+        return "Not found", 404
 
     return app
+
+
+def _json(data, status=200):
+    return Response(
+        json.dumps(data),
+        status_code=status,
+        headers={"Content-Type": "application/json"},
+    )
+
+
+def _changed(before, payload, key):
+    return key in payload and str(payload[key]) != str(before.get(key, ""))
+
+
+def _validate_text_payload(payload):
+    mode = payload.get("mode")
+    if mode not in ("single", "multiple"):
+        return "Invalid mode type"
+
+    words = payload.get("words")
+    if not isinstance(words, list):
+        return "Invalid words array"
+
+    if mode == "single" and (not words or str(words[0]).strip() == ""):
+        return "Single word cannot be empty"
+
+    if mode == "multiple" and not words:
+        return "Word list cannot be empty"
+
+    try:
+        delay = float(payload.get("delay"))
+    except (TypeError, ValueError):
+        return "Invalid delay type / value"
+
+    if delay < 1:
+        return "Invalid delay type / value"
+
+    if not isinstance(payload.get("center"), bool):
+        return "Invalid center type"
+
+    return None
+
+
+def _percent_decode(value):
+    result = []
+    index = 0
+
+    while index < len(value):
+        char = value[index]
+        if char == "%" and index + 2 < len(value):
+            try:
+                result.append(chr(int(value[index + 1 : index + 3], 16)))
+                index += 3
+                continue
+            except ValueError:
+                pass
+        if char == "+":
+            result.append(" ")
+        else:
+            result.append(char)
+        index += 1
+
+    return "".join(result)
