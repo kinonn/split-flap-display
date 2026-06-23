@@ -689,6 +689,117 @@
                 </div>
             </div>
 
+            <h2
+                class="text-xl font-semibold text-left w-full border-b border-gray-600 pb-2 mt-10 mb-2"
+            >
+                Multi-Group ESP-NOW Settings
+            </h2>
+
+            <label for="groupMode" class="block text-left text-lg mt-4">
+                Device Role
+            </label>
+            <select
+                id="groupMode"
+                class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-white"
+                x-model.number="settings.groupMode"
+            >
+                <option value="0">Single Device (default)</option>
+                <option value="1">Master Controller</option>
+                <option value="2">Slave</option>
+            </select>
+
+            <div x-show="settings.groupMode != 0" x-cloak>
+                <label for="numGroups" class="block text-left text-lg mt-4">
+                    Number of Groups (1&ndash;6)
+                </label>
+                <input
+                    id="numGroups"
+                    class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                    type="number"
+                    min="1"
+                    max="6"
+                    x-model.number="settings.numGroups"
+                />
+                <div
+                    class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                    x-cloak
+                    x-show="errors.key === 'numGroups'"
+                    x-text="errors.message"
+                ></div>
+
+                <label for="groupIndex" class="block text-left text-lg mt-4">
+                    This Device's Group Index (0&ndash;5)
+                </label>
+                <input
+                    id="groupIndex"
+                    class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                    type="number"
+                    min="0"
+                    max="5"
+                    x-model.number="settings.groupIndex"
+                />
+                <div
+                    class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                    x-cloak
+                    x-show="errors.key === 'groupIndex'"
+                    x-text="errors.message"
+                ></div>
+
+                <label class="block text-left text-lg mt-4">
+                    Module Counts per Group
+                </label>
+                <div class="grid grid-cols-6 gap-2 mt-2 w-full">
+                    <template
+                        x-for="i in Array.from({ length: settings.numGroups })"
+                        :key="`mc-${i-1}-${moduleCountArray[i-1] || ''}`"
+                    >
+                        <input
+                            type="number"
+                            min="1"
+                            max="8"
+                            class="w-full p-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                            :value="moduleCountArray[i-1]"
+                            @input="setModuleCount(i-1, $event.target.value)"
+                            :placeholder="`G${i-1}`"
+                        />
+                    </template>
+                </div>
+                <div
+                    class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                    x-cloak
+                    x-show="errors.key === 'groupModuleCounts'"
+                    x-text="errors.message"
+                ></div>
+
+                <label class="block text-left text-lg mt-4">
+                    Slave MAC Addresses (one per group; index 0 is this device)
+                </label>
+                <div class="grid grid-cols-1 gap-2 mt-2 w-full">
+                    <template
+                        x-for="i in Array.from({ length: settings.numGroups })"
+                        :key="`mac-${i-1}-${macArray[i-1] || ''}`"
+                    >
+                        <input
+                            type="text"
+                            class="w-full p-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100 font-mono"
+                            :value="macArray[i-1]"
+                            @input="setMac(i-1, $event.target.value)"
+                            :placeholder="`aa:bb:cc:dd:ee:ff  (group ${i-1})`"
+                        />
+                    </template>
+                </div>
+                <div
+                    class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                    x-cloak
+                    x-show="errors.key === 'groupMacAddresses'"
+                    x-text="errors.message"
+                ></div>
+                <p class="text-xs italic text-gray-400 mt-2">
+                    A slave's MAC can be found at its <code>http://&lt;slave&gt;.local</code>
+                    settings page (Debugging Info) or printed to the REPL on first boot.
+                </p>
+            </div>
+
             <div class="flex items-center justify-between w-full my-6">
                 <a
                     href="/index.html"
