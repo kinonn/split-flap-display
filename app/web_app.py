@@ -35,6 +35,23 @@ def create_app(settings, controller, mqtt):
     async def get_settings(request):
         return _json(settings.to_dict())
 
+    @app.get("/multigroup/status")
+    async def multigroup_status(request):
+        coord = getattr(controller, "multi_group_coordinator", None)
+        if coord is None:
+            return _json({"groups": []})
+        per_group = coord.poll_acks()
+        counts = settings.get_int_vector(
+            "groupModuleCounts", settings.get_int("numGroups"), fill=0)
+        out = []
+        for i in range(settings.get_int("numGroups")):
+            out.append({
+                "group": i,
+                "modules": counts[i] if i < len(counts) else 0,
+                "status": per_group.get(i, "idle"),
+            })
+        return _json({"groups": out, "mode": settings.get_int("mode")})
+
     @app.post("/settings/reset")
     async def reset_settings(request):
         settings.reset()
