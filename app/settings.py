@@ -38,6 +38,12 @@ DEFAULT_SETTINGS = {
     "stepsPerRot": 2048,
     "maxVel": 20,
     "charset": 48,
+    # Multi-group ESP-NOW settings
+    "groupMode": 0,            # 0 = single-device, 1 = master, 2 = slave
+    "numGroups": 1,            # 1..6 (master + up to 5 slaves)
+    "groupIndex": 0,           # 0..5 — which group this device is
+    "groupModuleCounts": "",   # CSV of module counts, e.g. "8,6,4"
+    "groupMacAddresses": "",   # CSV of MAC addresses, one per slave
     # Operational state
     "mode": 0,
 }
@@ -65,6 +71,11 @@ SETTING_TYPES = {
     "stepsPerRot": "int",
     "maxVel": "float",
     "charset": "int",
+    "groupMode": "int",
+    "numGroups": "int",
+    "groupIndex": "int",
+    "groupModuleCounts": "int_csv",
+    "groupMacAddresses": "str_csv",
     "mode": "int",
 }
 
@@ -163,6 +174,14 @@ class Settings:
 
     def get_int_vector(self, key, length=None, fill=0):
         values = parse_int_csv(self._data.get(key, ""))
+        if length is not None:
+            while len(values) < length:
+                values.append(fill)
+            values = values[:length]
+        return values
+
+    def get_string_vector(self, key, length=None, fill=""):
+        values = parse_str_csv(self._data.get(key, ""))
         if length is not None:
             while len(values) < length:
                 values.append(fill)
