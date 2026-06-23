@@ -35,6 +35,23 @@ def create_app(settings, controller, mqtt):
     async def get_settings(request):
         return _json(settings.to_dict())
 
+    @app.get("/multigroup/status")
+    async def multigroup_status(request):
+        coord = getattr(controller, "multi_group_coordinator", None)
+        if coord is None:
+            return _json({"groups": []})
+        per_group = coord.poll_acks()
+        counts = settings.get_int_vector(
+            "groupModuleCounts", settings.get_int("numGroups"), fill=0)
+        out = []
+        for i in range(settings.get_int("numGroups")):
+            out.append({
+                "group": i,
+                "modules": counts[i] if i < len(counts) else 0,
+                "status": per_group.get(i, "idle"),
+            })
+        return _json({"groups": out, "mode": settings.get_int("mode")})
+
     @app.post("/settings/reset")
     async def reset_settings(request):
         settings.reset()
@@ -120,9 +137,15 @@ def create_app(settings, controller, mqtt):
         if error:
             return _json({"message": error, "type": "error"}, 400)
 
-        delay_ms = int(float(payload["delay"]) * 1000)
         centering = bool(payload["center"])
         mode = payload["mode"]
+
+        if mode == "multigroup":
+            text = _percent_decode(str(payload["text"]))
+            controller.set_multi_group_text(text, centering)
+            return _json({"message": "Text updated successfully!", "type": "success"})
+
+        delay_ms = int(float(payload["delay"]) * 1000)
         words = [_percent_decode(str(word)) for word in payload["words"]]
 
         if mode == "single":
@@ -164,8 +187,16 @@ def _changed(before, payload, key):
 
 def _validate_text_payload(payload):
     mode = payload.get("mode")
-    if mode not in ("single", "multiple"):
+    if mode not in ("single", "multiple", "multigroup"):
         return "Invalid mode type"
+
+    if mode == "multigroup":
+        text = payload.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return "Multi-group text cannot be empty"
+        if not isinstance(payload.get("center"), bool):
+            return "Invalid center type"
+        return None
 
     words = payload.get("words")
     if not isinstance(words, list):

@@ -20,6 +20,7 @@ MODE_SINGLE = 0
 MODE_MULTI = 1
 MODE_DATE = 2
 MODE_TIME = 3
+MODE_MULTI_GROUP = 4
 MODE_RANDOM = 5
 
 
@@ -35,6 +36,10 @@ class DisplayController:
         self.multi_word_delay_ms = 1000
         self.multi_word_index = 0
         self.last_switch_multi = time.ticks_ms()
+        self.multi_group_text = ""
+        self.multi_group_segments = []
+        self.multi_group_centering = True
+        self.multi_group_coordinator = None
         self.last_check_datetime = time.ticks_ms()
         self.last_check_wifi = time.ticks_ms()
         self.written_string = ""
@@ -57,6 +62,35 @@ class DisplayController:
         self.centering = bool(centering)
         self.settings.set("mode", MODE_MULTI)
 
+    def set_multi_group_text(self, text, centering=True):
+        """Split text into per-group segments and store locally for the master."""
+        text = str(text)
+        counts = self.settings.get_int_vector(
+            "groupModuleCounts", self.settings.get_int("numGroups"), fill=0
+        )
+        if not counts:
+            counts = [self.display.num_modules]
+        total = sum(counts)
+        if total == 0:
+            total = self.display.num_modules
+            counts = [self.display.num_modules]
+
+        if len(text) < total:
+            text = text + " " * (total - len(text))
+        elif len(text) > total:
+            text = text[:total]
+
+        segments = []
+        offset = 0
+        for c in counts:
+            segments.append(text[offset:offset + c])
+            offset += c
+
+        self.multi_group_text = text
+        self.multi_group_segments = segments
+        self.multi_group_centering = bool(centering)
+        self.settings.set("mode", MODE_MULTI_GROUP)
+
     def request_reconnect(self):
         wifi_manager.request_reconnect()
 
@@ -76,6 +110,8 @@ class DisplayController:
                 self._date_mode()
             elif mode == MODE_TIME:
                 self._time_mode()
+            elif mode == MODE_MULTI_GROUP:
+                self._multi_group_mode()
             elif mode == MODE_RANDOM:
                 self.display.test_random()
                 await _sleep_ms(2500)
@@ -139,6 +175,16 @@ class DisplayController:
         if value != self.written_string:
             self.display.write_string(value, MAX_RPM)
             self.written_string = value
+
+    def _multi_group_mode(self):
+        if not self.multi_group_segments:
+            return
+        first = self.multi_group_segments[0]
+        if first != self.written_string:
+            self.display.write_string(first, MAX_RPM, centering=self.multi_group_centering)
+            self.written_string = first
+        if self.multi_group_coordinator is not None:
+            self.multi_group_coordinator.poll_acks()
 
     def _check_wifi(self):
         now = time.ticks_ms()

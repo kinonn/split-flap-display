@@ -35,7 +35,7 @@
             >
                 <option value="2">Date</option>
                 <option value="3">Time</option>
-                <!--        <option value="4">Count</option>-->
+                <option value="4">Multi-Group (Master)</option>
                 <option value="6">Custom Text</option>
                 <option value="5">Random</option>
             </select>
@@ -157,6 +157,77 @@
                                 x-model="delay"
                             />
                         </div>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="settings.mode == 4">
+                <div class="w-full" x-data="{ groups: [] }" x-init="
+                    if (typeof multiGroupPoller === 'undefined') {
+                        window.multiGroupPoller = setInterval(async () => {
+                            try {
+                                const r = await fetch('/multigroup/status');
+                                const j = await r.json();
+                                groups = j.groups || [];
+                            } catch (e) { /* ignore */ }
+                        }, 2000);
+                    }
+                ">
+                    <label class="block text-left text-lg mb-2">
+                        Message (spans all groups):
+                    </label>
+                    <input
+                        type="text"
+                        x-model="multiGroupText"
+                        placeholder="Enter text spanning all groups"
+                        class="w-full p-3 mt-2 text-lg border border-neutral-600 rounded-md text-center bg-neutral-700 text-white"
+                    />
+                    <label class="flex items-center gap-3 mt-4 justify-center">
+                        <span>Center Text</span>
+                        <label class="relative inline-block w-12 h-6">
+                            <input
+                                type="checkbox"
+                                x-model="centerText"
+                                class="hidden"
+                            />
+                            <span
+                                class="absolute inset-0 bg-neutral-600 rounded-full cursor-pointer transition duration-300"
+                            ></span>
+                            <span
+                                class="absolute left-1 top-1 w-4 h-4 cursor-pointer rounded-full transition-transform duration-300"
+                                :class="centerText ? 'translate-x-6 bg-green-600' : 'translate-x-0 bg-neutral-300'"
+                            ></span>
+                        </label>
+                    </label>
+
+                    <h3 class="text-left text-lg mt-6 mb-2 border-b border-gray-600 pb-1">
+                        Group Status
+                    </h3>
+                    <div class="grid grid-cols-1 gap-2 mt-2">
+                        <template x-for="g in groups" :key="g.group">
+                            <div class="flex items-center justify-between p-2 rounded bg-neutral-700">
+                                <span>
+                                    Group <span x-text="g.group"></span>
+                                    &middot;
+                                    <span x-text="g.modules"></span> modules
+                                </span>
+                                <span
+                                    :class="{
+                                        'text-yellow-400': g.status === 'pending',
+                                        'text-blue-400':   g.status === 'sent',
+                                        'text-green-400':  g.status === 'acked',
+                                        'text-red-400':    g.status === 'timeout' || g.status === 'error',
+                                        'text-gray-400':   g.status === 'idle',
+                                    }"
+                                    x-text="g.status"
+                                ></span>
+                            </div>
+                        </template>
+                        <template x-if="groups.length === 0">
+                            <div class="text-neutral-400 text-sm italic text-center p-2">
+                                No group status yet. Send a message to start.
+                            </div>
+                        </template>
                     </div>
                 </div>
             </template>

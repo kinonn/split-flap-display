@@ -24,6 +24,12 @@ def _test_display():
 
 async def main():
     settings = Settings()
+    if settings.get_int("groupMode") == 2:
+        from slave_group import SlaveGroup
+        slave = SlaveGroup(settings)
+        await slave.run()
+        return
+
     if not wifi_manager.state.get("configured"):
         wifi_manager.configure(settings)
 
