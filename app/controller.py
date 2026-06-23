@@ -39,6 +39,7 @@ class DisplayController:
         self.multi_group_text = ""
         self.multi_group_segments = []
         self.multi_group_centering = True
+        self.multi_group_coordinator = None
         self.last_check_datetime = time.ticks_ms()
         self.last_check_wifi = time.ticks_ms()
         self.written_string = ""
@@ -109,6 +110,8 @@ class DisplayController:
                 self._date_mode()
             elif mode == MODE_TIME:
                 self._time_mode()
+            elif mode == MODE_MULTI_GROUP:
+                self._multi_group_mode()
             elif mode == MODE_RANDOM:
                 self.display.test_random()
                 await _sleep_ms(2500)
@@ -172,6 +175,16 @@ class DisplayController:
         if value != self.written_string:
             self.display.write_string(value, MAX_RPM)
             self.written_string = value
+
+    def _multi_group_mode(self):
+        if not self.multi_group_segments:
+            return
+        first = self.multi_group_segments[0]
+        if first != self.written_string:
+            self.display.write_string(first, MAX_RPM, centering=self.multi_group_centering)
+            self.written_string = first
+        if self.multi_group_coordinator is not None:
+            self.multi_group_coordinator.poll_acks()
 
     def _check_wifi(self):
         now = time.ticks_ms()
