@@ -121,6 +121,20 @@ def str_csv_to_string(value):
     return ",".join(str(item) for item in value)
 
 
+def _is_valid_mac(value):
+    parts = value.split(":")
+    if len(parts) != 6:
+        return False
+    for p in parts:
+        if len(p) != 2:
+            return False
+        try:
+            int(p, 16)
+        except ValueError:
+            return False
+    return True
+
+
 class Settings:
     def __init__(self, path=CONFIG_FILE):
         self.path = path
@@ -191,6 +205,40 @@ class Settings:
     def set(self, key, value):
         self.update({key: value})
 
+    def _validate_multigroup(self):
+        num_groups = self._data.get("numGroups", 1)
+        group_index = self._data.get("groupIndex", 0)
+        counts = parse_int_csv(self._data.get("groupModuleCounts", ""))
+        macs = parse_str_csv(self._data.get("groupMacAddresses", ""))
+
+        if group_index >= num_groups:
+            raise ValidationError(
+                "groupIndex",
+                "groupIndex must be less than numGroups",
+            )
+        if counts and len(counts) != num_groups:
+            raise ValidationError(
+                "groupModuleCounts",
+                "expected %d module counts, got %d" % (num_groups, len(counts)),
+            )
+        if macs and len(macs) != num_groups:
+            raise ValidationError(
+                "groupMacAddresses",
+                "expected %d MAC addresses, got %d" % (num_groups, len(macs)),
+            )
+        for i, c in enumerate(counts):
+            if not (1 <= c <= 8):
+                raise ValidationError(
+                    "groupModuleCounts",
+                    "group %d module count must be 1..8 (got %d)" % (i, c),
+                )
+        for i, m in enumerate(macs):
+            if not _is_valid_mac(m):
+                raise ValidationError(
+                    "groupMacAddresses",
+                    "group %d MAC '%s' is not aa:bb:cc:dd:ee:ff format" % (i, m),
+                )
+
     def update(self, patch):
         if not isinstance(patch, dict):
             raise ValidationError("", "Expected a JSON object")
@@ -207,6 +255,7 @@ class Settings:
             next_data[key] = coerced
 
         self._data = next_data
+        self._validate_multigroup()
         self.save()
         return changed
 
@@ -218,9 +267,16 @@ class Settings:
 
         if setting_type == "int":
             try:
-                return int(value)
+                value = int(value)
             except (TypeError, ValueError):
                 raise ValidationError(key, "Expected an integer value")
+            if key == "groupMode" and value not in (0, 1, 2):
+                raise ValidationError(key, "groupMode must be 0, 1, or 2")
+            if key == "numGroups" and not (1 <= value <= 6):
+                raise ValidationError(key, "numGroups must be between 1 and 6")
+            if key == "groupIndex" and not (0 <= value <= 5):
+                raise ValidationError(key, "groupIndex must be between 0 and 5")
+            return value
 
         if setting_type == "float":
             try:
