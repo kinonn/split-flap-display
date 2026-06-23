@@ -97,6 +97,19 @@ def int_csv_to_string(value):
     return ",".join(str(int(item)) for item in value)
 
 
+def parse_str_csv(value):
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    value = str(value).strip()
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",")]
+
+
+def str_csv_to_string(value):
+    return ",".join(str(item) for item in value)
+
+
 class Settings:
     def __init__(self, path=CONFIG_FILE):
         self.path = path
@@ -201,5 +214,8 @@ class Settings:
                 return int_csv_to_string(parse_int_csv(value))
             except (TypeError, ValueError):
                 raise ValidationError(key, "Non-integer value found")
+
+        if setting_type == "str_csv":
+            return str_csv_to_string(parse_str_csv(value))
 
         raise ValidationError(key, "Unsupported setting type")
