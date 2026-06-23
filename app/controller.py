@@ -36,6 +36,9 @@ class DisplayController:
         self.multi_word_delay_ms = 1000
         self.multi_word_index = 0
         self.last_switch_multi = time.ticks_ms()
+        self.multi_group_text = ""
+        self.multi_group_segments = []
+        self.multi_group_centering = True
         self.last_check_datetime = time.ticks_ms()
         self.last_check_wifi = time.ticks_ms()
         self.written_string = ""
@@ -57,6 +60,35 @@ class DisplayController:
         self.multi_word_delay_ms = delay_ms
         self.centering = bool(centering)
         self.settings.set("mode", MODE_MULTI)
+
+    def set_multi_group_text(self, text, centering=True):
+        """Split text into per-group segments and store locally for the master."""
+        text = str(text)
+        counts = self.settings.get_int_vector(
+            "groupModuleCounts", self.settings.get_int("numGroups"), fill=0
+        )
+        if not counts:
+            counts = [self.display.num_modules]
+        total = sum(counts)
+        if total == 0:
+            total = self.display.num_modules
+            counts = [self.display.num_modules]
+
+        if len(text) < total:
+            text = text + " " * (total - len(text))
+        elif len(text) > total:
+            text = text[:total]
+
+        segments = []
+        offset = 0
+        for c in counts:
+            segments.append(text[offset:offset + c])
+            offset += c
+
+        self.multi_group_text = text
+        self.multi_group_segments = segments
+        self.multi_group_centering = bool(centering)
+        self.settings.set("mode", MODE_MULTI_GROUP)
 
     def request_reconnect(self):
         wifi_manager.request_reconnect()
