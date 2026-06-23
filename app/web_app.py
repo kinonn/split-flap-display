@@ -137,9 +137,15 @@ def create_app(settings, controller, mqtt):
         if error:
             return _json({"message": error, "type": "error"}, 400)
 
-        delay_ms = int(float(payload["delay"]) * 1000)
         centering = bool(payload["center"])
         mode = payload["mode"]
+
+        if mode == "multigroup":
+            text = _percent_decode(str(payload["text"]))
+            controller.set_multi_group_text(text, centering)
+            return _json({"message": "Text updated successfully!", "type": "success"})
+
+        delay_ms = int(float(payload["delay"]) * 1000)
         words = [_percent_decode(str(word)) for word in payload["words"]]
 
         if mode == "single":
@@ -181,8 +187,16 @@ def _changed(before, payload, key):
 
 def _validate_text_payload(payload):
     mode = payload.get("mode")
-    if mode not in ("single", "multiple"):
+    if mode not in ("single", "multiple", "multigroup"):
         return "Invalid mode type"
+
+    if mode == "multigroup":
+        text = payload.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return "Multi-group text cannot be empty"
+        if not isinstance(payload.get("center"), bool):
+            return "Invalid center type"
+        return None
 
     words = payload.get("words")
     if not isinstance(words, list):
