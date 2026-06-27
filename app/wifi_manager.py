@@ -53,6 +53,27 @@ def is_connected():
     return network.WLAN(network.STA_IF).isconnected()
 
 
+def device_info():
+    info = {
+        "ip": state.get("ip", "0.0.0.0"),
+        "mac": "",
+    }
+
+    if network is None:
+        return info
+
+    wlan = _active_interface()
+    ip = _interface_ip(wlan)
+    mac = _interface_mac(wlan)
+
+    if ip:
+        info["ip"] = ip
+    if mac:
+        info["mac"] = mac
+
+    return info
+
+
 def check_wifi(settings):
     if network is None or state["connection_mode"] != 1:
         return
@@ -149,3 +170,31 @@ def _sync_clock():
         print("NTP time synchronized")
     except Exception as exc:
         print("NTP sync failed:", exc)
+
+
+def _active_interface():
+    if state.get("connection_mode") == 1:
+        return network.WLAN(network.STA_IF)
+    return network.WLAN(network.AP_IF)
+
+
+def _interface_ip(wlan):
+    try:
+        return wlan.ifconfig()[0]
+    except Exception:
+        return ""
+
+
+def _interface_mac(wlan):
+    try:
+        mac = wlan.config("mac")
+    except Exception:
+        return ""
+
+    if not mac:
+        return ""
+
+    try:
+        return ":".join("%02X" % byte for byte in mac)
+    except Exception:
+        return str(mac)

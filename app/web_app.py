@@ -35,6 +35,14 @@ def create_app(settings, controller, mqtt):
     async def get_settings(request):
         return _json(settings.to_dict())
 
+    @app.get("/device/info")
+    async def get_device_info(request):
+        return _json(wifi_manager.device_info())
+
+    @app.get("/master/status")
+    async def get_master_status(request):
+        return _json(controller.espnow_status())
+
     @app.post("/settings/reset")
     async def reset_settings(request):
         settings.reset()
@@ -100,6 +108,17 @@ def create_app(settings, controller, mqtt):
 
         if "timezone" in changed:
             timekeeper.configure(settings)
+
+        master_keys = (
+            "masterEnabled",
+            "groupId",
+            "masterGroupCount",
+            "masterGroupMacs",
+            "masterGroupModules",
+        )
+        if any(key in changed for key in master_keys):
+            if getattr(controller, "espnow", None) is not None:
+                controller.espnow.setup()
 
         if reconnect:
             controller.request_reconnect()

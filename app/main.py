@@ -6,6 +6,7 @@ except ImportError:
 import time
 from controller import DisplayController
 from display import SplitFlapDisplay
+from espnow_manager import EspNowCoordinator
 from mqtt_client import SplitFlapMqtt
 from settings import Settings
 from web_app import create_app
@@ -33,6 +34,8 @@ async def main():
     mqtt = SplitFlapMqtt(settings)
     mqtt.set_display(display)
     display.set_mqtt(mqtt)
+    espnow = EspNowCoordinator(settings, display)
+    espnow.setup()
 
     connected = wifi_manager.is_connected()
     if connected:
@@ -47,7 +50,8 @@ async def main():
         else:
             display.write_char("X")
 
-    controller = DisplayController(settings, display, mqtt)
+    controller = DisplayController(settings, display, mqtt, espnow)
+    mqtt.set_controller(controller)
     app = create_app(settings, controller, mqtt)
 
     asyncio.create_task(app.start_server(host="0.0.0.0", port=80, debug=False))

@@ -28,16 +28,22 @@ DEFAULT_SETTINGS = {
     "mqtt_user": "",
     "mqtt_pass": "",
     # Hardware settings
-    "moduleCount": 7,
-    "moduleAddresses": "32, 33, 34, 35, 36, 37, 38",
+    "moduleCount": 8,
+    "moduleAddresses": "32, 33, 34, 35, 36, 37, 38, 39",
     "magnetPosition": 615,
-    "moduleOffsets": "23, 12, 50, 0, 0, 6, 12",
+    "moduleOffsets": "23, 12, 50, 0, 0, 6, 12, -6",
     "displayOffset": 0,
     "sdaPin": 8,
     "sclPin": 9,
     "stepsPerRot": 2048,
     "maxVel": 20,
     "charset": 48,
+    # ESP-NOW multi-group settings
+    "masterEnabled": 0,
+    "groupId": 1,
+    "masterGroupCount": 1,
+    "masterGroupMacs": "",
+    "masterGroupModules": "7",
     # Operational state
     "mode": 0,
 }
@@ -65,6 +71,11 @@ SETTING_TYPES = {
     "stepsPerRot": "int",
     "maxVel": "float",
     "charset": "int",
+    "masterEnabled": "int",
+    "groupId": "int",
+    "masterGroupCount": "int",
+    "masterGroupMacs": "str",
+    "masterGroupModules": "int_csv",
     "mode": "int",
 }
 
@@ -95,6 +106,43 @@ def parse_int_csv(value):
 
 def int_csv_to_string(value):
     return ",".join(str(int(item)) for item in value)
+
+
+def parse_string_list(value, separator=";"):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value]
+
+    value = str(value).strip()
+    if not value:
+        return []
+
+    return [part.strip() for part in value.split(separator)]
+
+
+def string_list_to_string(value, separator=";"):
+    return separator.join(str(item).strip() for item in value)
+
+
+def normalize_mac(value):
+    value = str(value or "").strip().replace("-", ":").upper()
+    if not value:
+        return ""
+
+    compact = value.replace(":", "")
+    if len(compact) != 12:
+        raise ValueError("Expected 12 hexadecimal digits")
+
+    try:
+        int(compact, 16)
+    except ValueError:
+        raise ValueError("Expected hexadecimal MAC address")
+
+    return ":".join(compact[index : index + 2] for index in range(0, 12, 2))
+
+
+def normalize_mac_list(value):
+    macs = parse_string_list(value)
+    return string_list_to_string([normalize_mac(mac) for mac in macs])
 
 
 class Settings:
@@ -174,6 +222,7 @@ class Settings:
                 changed.append(key)
             next_data[key] = coerced
 
+        self._validate(next_data)
         self._data = next_data
         self.save()
         return changed
@@ -203,3 +252,42 @@ class Settings:
                 raise ValidationError(key, "Non-integer value found")
 
         raise ValidationError(key, "Unsupported setting type")
+
+    def _validate(self, data):
+        module_count = int(data.get("moduleCount", 0))
+        if module_count < 1 or module_count > 8:
+            raise ValidationError("moduleCount", "Module count must be 1-8")
+
+        group_id = int(data.get("groupId", 0))
+        if group_id < 1 or group_id > 6:
+            raise ValidationError("groupId", "Group ID must be 1-6")
+
+        group_count = int(data.get("masterGroupCount", 0))
+        if group_count < 1 or group_count > 6:
+            raise ValidationError("masterGroupCount", "Group count must be 1-6")
+
+        try:
+            group_modules = parse_int_csv(data.get("masterGroupModules", ""))
+        except ValueError:
+            raise ValidationError("masterGroupModules", "Group module counts must be integers")
+
+        for count in group_modules[:group_count]:
+            if count < 1 or count > 8:
+                raise ValidationError("masterGroupModules", "Each group must have 1-8 modules")
+
+        try:
+            data["masterGroupMacs"] = normalize_mac_list(data.get("masterGroupMacs", ""))
+        except ValueError as exc:
+            raise ValidationError("masterGroupMacs", str(exc))
+
+        if int(data.get("masterEnabled", 0)):
+            macs = parse_string_list(data.get("masterGroupMacs", ""))
+            while len(macs) < group_count:
+                macs.append("")
+
+            for index in range(1, group_count):
+                if not macs[index]:
+                    raise ValidationError(
+                        "masterGroupMacs",
+                        "MAC address is required for each remote group",
+                    )

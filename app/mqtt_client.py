@@ -15,6 +15,7 @@ class SplitFlapMqtt:
     def __init__(self, settings):
         self.settings = settings
         self.display = None
+        self.controller = None
         self.client = None
         self.enabled = False
         self.connected = False
@@ -28,6 +29,9 @@ class SplitFlapMqtt:
 
     def set_display(self, display):
         self.display = display
+
+    def set_controller(self, controller):
+        self.controller = controller
 
     def setup(self):
         self.disconnect()
@@ -154,7 +158,9 @@ class SplitFlapMqtt:
             message = str(payload)
 
         print("[MQTT] Message received:", message)
-        if self.display is not None:
+        if self.controller is not None:
+            self.controller.set_single_text(message, delay_ms=1000, centering=False)
+        elif self.display is not None:
             self.display.write_string(
                 message,
                 self.settings.get_float("maxVel"),

@@ -14,19 +14,44 @@
         <script defer src="/index.js" type="module"></script>
     </head>
     <body
-        x-data="Object.assign(page('Settings'),  { showAdvanced: false }, {
-    showHelp: false,
-    helpTitle: '',
-    helpContent: '',
-    showHelpModal(title, content) {
-        this.helpTitle = title;
-        this.helpContent = content;
-        this.showHelp = true;
-    }
-})"
+        x-data="page('Settings')"
         class="flex flex-col items-center justify-center min-h-screen bg-neutral-900 text-gray-100"
     >
         <div
+            x-data="{
+                showAdvanced: false,
+                get masterGroupMacArray() {
+                    return (settings.masterGroupMacs || '').split(';').map((value) => value.trim());
+                },
+                setMasterGroupMac(index, value) {
+                    const macs = this.masterGroupMacArray;
+                    macs[index] = value;
+                    settings.masterGroupMacs = macs.join(';');
+                },
+                get masterGroupModuleArray() {
+                    return (settings.masterGroupModules || '').split(',').map((value) => value.trim());
+                },
+                setMasterGroupModules(index, value) {
+                    const modules = this.masterGroupModuleArray;
+                    modules[index] = value;
+                    settings.masterGroupModules = modules.join(',');
+                },
+                deviceInfo: {
+                    ip: '',
+                    mac: ''
+                },
+                loadDeviceInfo() {
+                    fetch('/device/info')
+                        .then((response) => response.json())
+                        .then((info) => {
+                            this.deviceInfo = info;
+                        })
+                        .catch(() => {
+                            this.deviceInfo = { ip: '', mac: '' };
+                        });
+                }
+            }"
+            x-init="loadDeviceInfo()"
             class="flex flex-col items-center justify-center bg-neutral-800 shadow-[0_0_30px_10px_#222] p-6 m-6 rounded-lg max-w-lg w-11/12 text-center"
         >
             <a
@@ -105,10 +130,10 @@
                     x-model="settings.timezone"
                     id="timezone"
                 >
-                    <template x-for="(name, zone) in timezones" :key="zone">
+                    <template x-for="(zone, name) in timezones" :key="zone">
                         <option
                             :value="zone"
-                            x-text="zone"
+                            x-text="name"
                             :selected="zone === settings.timezone"
                         ></option>
                     </template>
@@ -226,6 +251,27 @@
             >
                 Wi-Fi Settings
             </h2>
+
+            <div class="grid grid-cols-2 gap-2 w-full">
+                <div>
+                    <label class="block text-left text-lg mt-4">
+                        IP Address
+                    </label>
+                    <div
+                        class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                        x-text="deviceInfo.ip || 'Unavailable'"
+                    ></div>
+                </div>
+                <div>
+                    <label class="block text-left text-lg mt-4">
+                        MAC Address
+                    </label>
+                    <div
+                        class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                        x-text="deviceInfo.mac || 'Unavailable'"
+                    ></div>
+                </div>
+            </div>
 
             <div class="flex gap-2 flex-wrap">
                 <div class="grow">
@@ -385,6 +431,120 @@
                         placeholder="optional"
                     />
                 </div>
+            </div>
+
+            <h2
+                class="text-xl font-semibold text-left w-full border-b border-gray-600 pb-2 mt-10 mb-2"
+            >
+                ESP-NOW Master Settings
+            </h2>
+
+            <div class="grid grid-cols-3 gap-2 w-full">
+                <div>
+                    <label class="block text-left text-lg mt-4">
+                        Master Controller
+                    </label>
+                    <select
+                        class="w-full p-3.5 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-white"
+                        x-model.number="settings.masterEnabled"
+                    >
+                        <option value="0">Disabled</option>
+                        <option value="1">Enabled</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="groupId" class="block text-left text-lg mt-4">
+                        This Group ID
+                    </label>
+                    <input
+                        class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                        type="number"
+                        id="groupId"
+                        x-model.number="settings.groupId"
+                        min="1"
+                        max="6"
+                    />
+                    <div
+                        class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                        x-cloak
+                        x-show="errors.key === 'groupId'"
+                        x-text="errors.message"
+                    ></div>
+                </div>
+
+                <div>
+                    <label
+                        for="masterGroupCount"
+                        class="block text-left text-lg mt-4"
+                    >
+                        Total Groups
+                    </label>
+                    <input
+                        class="w-full p-3 mt-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                        type="number"
+                        id="masterGroupCount"
+                        x-model.number="settings.masterGroupCount"
+                        min="1"
+                        max="6"
+                    />
+                    <div
+                        class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                        x-cloak
+                        x-show="errors.key === 'masterGroupCount'"
+                        x-text="errors.message"
+                    ></div>
+                </div>
+            </div>
+
+            <div class="w-full mt-4">
+                <div class="grid grid-cols-3 gap-2 text-sm text-gray-400 text-left">
+                    <span>Group</span>
+                    <span>Modules</span>
+                    <span>ESP-NOW MAC</span>
+                </div>
+                <template
+                    x-for="(_, i) in Array.from({ length: settings.masterGroupCount || 1 })"
+                    :key="`group-${i}`"
+                >
+                    <div class="grid grid-cols-3 gap-2 mt-2">
+                        <input
+                            class="w-full p-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                            type="text"
+                            :value="`Group ${i + 1}`"
+                            disabled
+                        />
+                        <input
+                            class="no-buttons w-full p-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                            type="number"
+                            min="1"
+                            max="8"
+                            :disabled="i === 0"
+                            :value="i === 0 ? settings.moduleCount : (masterGroupModuleArray[i] || 8)"
+                            @input="setMasterGroupModules(i, $event.target.value)"
+                        />
+                        <input
+                            class="w-full p-2 text-lg border border-gray-600 rounded-md text-center bg-neutral-700 text-gray-100"
+                            type="text"
+                            :placeholder="i === 0 ? 'Local group' : 'AA:BB:CC:DD:EE:FF'"
+                            :disabled="i === 0"
+                            :value="i === 0 ? 'Local' : (masterGroupMacArray[i] || '')"
+                            @input="setMasterGroupMac(i, $event.target.value)"
+                        />
+                    </div>
+                </template>
+                <div
+                    class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                    x-cloak
+                    x-show="errors.key === 'masterGroupModules'"
+                    x-text="errors.message"
+                ></div>
+                <div
+                    class="w-full p-3 mt-2 text-sm text-white bg-red-700 rounded-md"
+                    x-cloak
+                    x-show="errors.key === 'masterGroupMacs'"
+                    x-text="errors.message"
+                ></div>
             </div>
 
             <h2

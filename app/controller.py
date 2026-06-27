@@ -24,10 +24,11 @@ MODE_RANDOM = 5
 
 
 class DisplayController:
-    def __init__(self, settings, display, mqtt):
+    def __init__(self, settings, display, mqtt, espnow=None):
         self.settings = settings
         self.display = display
         self.mqtt = mqtt
+        self.espnow = espnow
 
         self.centering = True
         self.input_string = ""
@@ -63,9 +64,17 @@ class DisplayController:
     def request_reboot(self):
         self.reboot_required = True
 
+    def espnow_status(self):
+        if self.espnow is None:
+            return {"enabled": False, "message": "", "groups": []}
+        return self.espnow.status()
+
     async def run(self):
         while True:
             self.mqtt.loop()
+            if self.espnow is not None:
+                self.espnow.poll()
+
             mode = self.settings.get_int("mode")
 
             if mode == MODE_SINGLE:
@@ -87,7 +96,7 @@ class DisplayController:
 
     def _single_input_mode(self):
         if self.input_string != self.written_string:
-            self.display.write_string(
+            self._write_string(
                 self.input_string,
                 MAX_RPM,
                 centering=self.centering,
@@ -104,7 +113,7 @@ class DisplayController:
 
         word = self.multi_words[self.multi_word_index]
         if word != self.written_string:
-            self.display.write_string(word, MAX_RPM, centering=self.centering)
+            self._write_string(word, MAX_RPM, centering=self.centering)
             self.written_string = word
 
         self.last_switch_multi = now
@@ -122,7 +131,7 @@ class DisplayController:
             max_len=self.display.num_modules,
         )
         if value != self.written_string:
-            self.display.write_string(value, MAX_RPM)
+            self._write_string(value, MAX_RPM)
             self.written_string = value
 
     def _time_mode(self):
@@ -137,7 +146,7 @@ class DisplayController:
             max_len=self.display.num_modules,
         )
         if value != self.written_string:
-            self.display.write_string(value, MAX_RPM)
+            self._write_string(value, MAX_RPM)
             self.written_string = value
 
     def _check_wifi(self):
@@ -170,6 +179,14 @@ class DisplayController:
                 self.written_string = "X"
 
         self.mqtt.setup()
+        if self.espnow is not None:
+            self.espnow.setup()
+
+    def _write_string(self, value, speed=MAX_RPM, centering=True):
+        if self.espnow is not None and self.espnow.is_master():
+            self.espnow.display_message(value, speed, centering=centering)
+        else:
+            self.display.write_string(value, speed, centering=centering)
 
     async def _reboot_if_needed(self):
         if not self.reboot_required:
